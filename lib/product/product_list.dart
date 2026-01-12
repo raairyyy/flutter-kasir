@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../product/product_create.dart';
 import '../product/product_edit.dart';
+import '../screens/profile/profile_page.dart';
 
 class ProductList extends StatefulWidget {
   const ProductList({super.key});
@@ -102,7 +103,15 @@ class _ProductListState extends State<ProductList> {
             child: IconButton(
               icon: const Icon(Icons.person_outline,
                   color: Color(0xFF0B4A46), size: 35),
-              onPressed: () {},
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfilePage(),
+                  ),
+                );
+              },
+
             ),
           ),
         ],

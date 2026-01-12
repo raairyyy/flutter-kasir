@@ -70,7 +70,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     child: Column(
                       children: [
-                        _infoTile(Icons.badge, "Nama", userData?['nama'] ?? "User"),
+                        _infoTile(Icons.badge, "Nama", userData?['namauser'] ?? "User"),
                         const Divider(height: 1),
                         _infoTile(Icons.email, "Email", userData?['email'] ?? "-"),
                         const Divider(height: 1),

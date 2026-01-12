@@ -90,7 +90,7 @@ if (_pickedXFile != null) {
 
   final imageBytes = await _pickedXFile!.readAsBytes();
 
-  await _supabase.storage.from('produk_images').uploadBinary(
+  await _supabase.storage.from('product_images').uploadBinary(
     path,
     imageBytes, // ✅ Uint8List langsung
     fileOptions: const FileOptions(
@@ -100,7 +100,7 @@ if (_pickedXFile != null) {
   );
 
   imageUrl =
-      _supabase.storage.from('produk_images').getPublicUrl(path);
+      _supabase.storage.from('product_images').getPublicUrl(path);
 }
 
 
