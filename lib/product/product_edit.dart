@@ -1,41 +1,56 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart'; // Penting untuk kIsWeb
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class ProductCreate extends StatefulWidget {
-  const ProductCreate({super.key});
+class ProductEdit extends StatefulWidget {
+  final Map<String, dynamic> product;
+  
+  const ProductEdit({super.key, required this.product});
 
   @override
-  State<ProductCreate> createState() => _ProductCreateState();
+  State<ProductEdit> createState() => _ProductEditState();
 }
 
-class _ProductCreateState extends State<ProductCreate> {
+class _ProductEditState extends State<ProductEdit> {
   final _supabase = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
 
-  // Controller input
-  final TextEditingController _namaController = TextEditingController();
-  final TextEditingController _hargaController = TextEditingController();
-  final TextEditingController _stokController = TextEditingController();
+  late TextEditingController _namaController;
+  late TextEditingController _hargaController;
+  late TextEditingController _stokController;
 
   int? _selectedKategoriId;
   List<Map<String, dynamic>> _categories = [];
   bool _isLoading = false;
 
-  // Variabel Gambar (Support Web & Mobile)
-  XFile? _pickedXFile;      // Menyimpan data file dari picker
-  Uint8List? _webImage;     // Untuk menampilkan gambar di Web
+  // Variabel Gambar
+  XFile? _pickedXFile;
+  Uint8List? _webImage;
+  String? _existingImageUrl;
   final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
+    // Initialize controllers with existing product data
+    _namaController = TextEditingController(text: widget.product['namaproduk'] ?? '');
+    _hargaController = TextEditingController(text: widget.product['harga']?.toString() ?? '');
+    _stokController = TextEditingController(text: widget.product['stok']?.toString() ?? '');
+    _selectedKategoriId = widget.product['kategoriid'];
+    _existingImageUrl = widget.product['gambar'];
     _fetchKategori();
   }
 
-  // Fungsi Pilih Gambar
+  @override
+  void dispose() {
+    _namaController.dispose();
+    _hargaController.dispose();
+    _stokController.dispose();
+    super.dispose();
+  }
+
   Future<void> _pickImage() async {
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -44,14 +59,12 @@ class _ProductCreateState extends State<ProductCreate> {
 
     if (pickedFile != null) {
       if (kIsWeb) {
-        // Jika di Web, baca sebagai Bytes
         final bytes = await pickedFile.readAsBytes();
         setState(() {
           _webImage = bytes;
           _pickedXFile = pickedFile;
         });
       } else {
-        // Jika di Mobile/Desktop
         setState(() {
           _pickedXFile = pickedFile;
         });
@@ -70,67 +83,64 @@ class _ProductCreateState extends State<ProductCreate> {
     }
   }
 
-Future<void> _saveProduct() async {
-  if (!_formKey.currentState!.validate() || _selectedKategoriId == null) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Lengkapi data dan pilih kategori!")),
-    );
-    return;
-  }
-
-  setState(() => _isLoading = true);
-
-  try {
-    String? imageUrl;
-
-// --- PROSES UPLOAD YANG BENAR ---
-if (_pickedXFile != null) {
-  final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-  final path = 'product_photos/$fileName';
-
-  final imageBytes = await _pickedXFile!.readAsBytes();
-
-  await _supabase.storage.from('produk_images').uploadBinary(
-    path,
-    imageBytes, // ✅ Uint8List langsung
-    fileOptions: const FileOptions(
-      contentType: 'image/jpeg',
-      upsert: false,
-    ),
-  );
-
-  imageUrl =
-      _supabase.storage.from('produk_images').getPublicUrl(path);
-}
-
-
-    // Simpan ke tabel 'produk'
-    await _supabase.from('produk').insert({
-      'namaproduk': _namaController.text,
-      'harga': double.tryParse(_hargaController.text) ?? 0,
-      'stok': int.tryParse(_stokController.text) ?? 0,
-      'kategoriid': _selectedKategoriId,
-      'stok_minimum': 1,
-      'gambar': imageUrl,
-    });
-
-    if (mounted) {
+  Future<void> _updateProduct() async {
+    if (!_formKey.currentState!.validate() || _selectedKategoriId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Produk berhasil ditambahkan!")),
+        const SnackBar(content: Text("Lengkapi data dan pilih kategori!")),
       );
-      Navigator.pop(context, true);
+      return;
     }
-  } catch (e) {
-    debugPrint("Gagal menyimpan: $e");
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Terjadi kesalahan: $e")),
-      );
+
+    setState(() => _isLoading = true);
+
+    try {
+      String? imageUrl = _existingImageUrl;
+
+      // Upload new image if picked
+      if (_pickedXFile != null) {
+        final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final path = 'product_photos/$fileName';
+
+        final imageBytes = await _pickedXFile!.readAsBytes();
+
+        await _supabase.storage.from('product_images').uploadBinary(
+          path,
+          imageBytes,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: false,
+          ),
+        );
+
+        imageUrl = _supabase.storage.from('produk_images').getPublicUrl(path);
+      }
+
+      // Update product in database
+      await _supabase.from('produk').update({
+        'namaproduk': _namaController.text,
+        'harga': double.tryParse(_hargaController.text) ?? 0,
+        'stok': int.tryParse(_stokController.text) ?? 0,
+        'kategoriid': _selectedKategoriId,
+        'gambar': imageUrl,
+      }).eq('produkid', widget.product['produkid']);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Produk berhasil diperbarui!")),
+        );
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      debugPrint("Gagal memperbarui: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Terjadi kesalahan: $e")),
+        );
+      }
+    } finally {
+      setState(() => _isLoading = false);
     }
-  } finally {
-    setState(() => _isLoading = false);
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -209,20 +219,31 @@ if (_pickedXFile != null) {
                       ? Image.memory(_webImage!, fit: BoxFit.cover)
                       : Image.file(File(_pickedXFile!.path), fit: BoxFit.cover),
                 )
-              : const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.camera_alt_outlined, size: 50, color: Colors.grey),
-                    SizedBox(height: 8),
-                    Text("Tambah Foto", style: TextStyle(color: Colors.grey)),
-                  ],
-                ),
+              : _existingImageUrl != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.network(
+                        _existingImageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const Icon(
+                          Icons.broken_image,
+                          size: 50,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    )
+                  : const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.camera_alt_outlined, size: 50, color: Colors.grey),
+                        SizedBox(height: 8),
+                        Text("Ubah Foto", style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
         ),
       ),
     );
   }
-
-  // --- Helper Widgets ---
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
@@ -233,8 +254,8 @@ if (_pickedXFile != null) {
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Tambah Produk", 
-            style: TextStyle(color: Colors.black, fontSize: 30, fontWeight: FontWeight.w900)),
+          const Text("Edit Produk",
+              style: TextStyle(color: Colors.black, fontSize: 30, fontWeight: FontWeight.w900)),
           const SizedBox(height: 15),
           IconButton(
             onPressed: () => Navigator.pop(context),
@@ -297,14 +318,14 @@ if (_pickedXFile != null) {
       width: double.infinity,
       height: 55,
       child: ElevatedButton(
-        onPressed: _isLoading ? null : _saveProduct,
+        onPressed: _isLoading ? null : _updateProduct,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF0D3B36),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         ),
         child: _isLoading
             ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white))
-            : const Text("Tambahkan", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            : const Text("Simpan Perubahan", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
       ),
     );
   }

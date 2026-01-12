@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../product/product_create.dart';
+import '../product/product_edit.dart';
 
 class ProductList extends StatefulWidget {
   const ProductList({super.key});
@@ -23,6 +24,49 @@ class _ProductListState extends State<ProductList> {
     } catch (e) {
       throw Exception('Gagal mengambil data: $e');
     }
+  }
+
+  // Fungsi untuk menghapus produk
+  Future<void> deleteProduct(int productId) async {
+    try {
+      await supabase.from('produk').delete().eq('produkid', productId);
+      setState(() {}); // Refresh list after delete
+    } catch (e) {
+      throw Exception('Gagal menghapus produk: $e');
+    }
+  }
+
+  // Dialog konfirmasi hapus
+  void _showDeleteConfirmation(BuildContext context, Map<String, dynamic> product) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Hapus Produk'),
+          content: Text('Apakah Anda yakin ingin menghapus "${product['namaproduk']}"?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await deleteProduct(product['produkid']);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Produk berhasil dihapus!')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Hapus', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -129,7 +173,19 @@ class _ProductListState extends State<ProductList> {
                     ),
                     itemCount: products.length,
                     itemBuilder: (context, index) {
-                      return ProductCard(product: products[index]);
+                      final product = products[index];
+                      return ProductCard(
+                        product: product,
+                        onEdit: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProductEdit(product: product),
+                            ),
+                          ).then((_) => setState(() {}));
+                        },
+                        onDelete: () => _showDeleteConfirmation(context, product),
+                      );
                     },
                   ),
                 );
@@ -154,7 +210,15 @@ class _ProductListState extends State<ProductList> {
 
 class ProductCard extends StatelessWidget {
   final Map<String, dynamic> product;
-  const ProductCard({super.key, required this.product});
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+
+  const ProductCard({
+    super.key,
+    required this.product,
+    this.onEdit,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -232,11 +296,44 @@ class ProductCard extends StatelessWidget {
               ),
             ),
           ),
-          const Positioned(
-            bottom: 10,
-            right: 5,
-            child: Icon(Icons.more_vert, color: Colors.grey),
-          )
+          // Popup Menu untuk Edit/Delete
+          Positioned(
+            bottom: 5,
+            right: 0,
+            child: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.grey),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onSelected: (value) {
+                if (value == 'edit' && onEdit != null) {
+                  onEdit!();
+                } else if (value == 'delete' && onDelete != null) {
+                  onDelete!();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, color: Color(0xFF0D3B36)),
+                      SizedBox(width: 8),
+                      Text('Edit'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Hapus', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
