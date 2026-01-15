@@ -15,17 +15,26 @@ class _ProductListState extends State<ProductList> {
   // Inisialisasi client Supabase
   final supabase = Supabase.instance.client;
 
+  String _searchQuery = "";
+  final TextEditingController _searchController = TextEditingController();
+
   // Fungsi untuk mengambil data dari tabel 'products'
-  Future<List<Map<String, dynamic>>> fetchProducts() async {
-    try {
-      final response = await supabase
-          .from('produk') // Ganti dengan nama tabel Anda
-          .select();
-      return List<Map<String, dynamic>>.from(response);
-    } catch (e) {
-      throw Exception('Gagal mengambil data: $e');
+Future<List<Map<String, dynamic>>> fetchProducts() async {
+  try {
+    // Mulai dengan query dasar
+    var query = supabase.from('produk').select();
+
+    // Jika user mengetik sesuatu, tambahkan filter 'ilike' (tidak peka huruf besar/kecil)
+    if (_searchQuery.isNotEmpty) {
+      query = query.ilike('namaproduk', '%$_searchQuery%');
     }
+
+    final response = await query.order('namaproduk', ascending: true);
+    return List<Map<String, dynamic>>.from(response);
+  } catch (e) {
+    throw Exception('Gagal mengambil data: $e');
   }
+}
 
   // Fungsi untuk menghapus produk
   Future<void> deleteProduct(int productId) async {
@@ -38,33 +47,113 @@ class _ProductListState extends State<ProductList> {
   }
 
   // Dialog konfirmasi hapus
+// Dialog konfirmasi hapus sesuai desain
   void _showDeleteConfirmation(BuildContext context, Map<String, dynamic> product) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text('Hapus Produk'),
-          content: Text('Apakah Anda yakin ingin menghapus "${product['namaproduk']}"?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Ikon Peringatan (Lingkaran merah muda dengan ikon !)
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBEE), // Merah sangat muda
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFFFCDD2), width: 2),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline,
+                    color: Colors.red,
+                    size: 40,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                // Judul
+                const Text(
+                  'Hapus Produk',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                
+                // Konten Teks dengan RichText untuk mewarnai Nama Produk
+                RichText(
+                  textAlign: TextAlign.center,
+                  text: TextSpan(
+                    style: const TextStyle(fontSize: 16, color: Colors.black54),
+                    children: [
+                      const TextSpan(text: 'Apakah anda yakin ingin\nmenghapus produk '),
+                      TextSpan(
+                        text: '${product['namaproduk']}?',
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 30),
+                
+                // Tombol Aksi (Batal & Hapus)
+                Row(
+                  children: [
+                    // Tombol Batal
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey.shade300,
+                          foregroundColor: Colors.black54,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Batal', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    
+                    // Tombol Hapus
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(context);
+                          await deleteProduct(product['produkid']);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Produk berhasil dihapus!')),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('Hapus', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () async {
-                Navigator.pop(context);
-                await deleteProduct(product['produkid']);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Produk berhasil dihapus!')),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              child: const Text('Hapus', style: TextStyle(color: Colors.white)),
-            ),
-          ],
+          ),
         );
       },
     );
@@ -125,9 +214,25 @@ class _ProductListState extends State<ProductList> {
               children: [
                 Expanded(
                   child: TextField(
+                    controller: _searchController, // Hubungkan controller
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value; // Update state dan trigger build ulang
+                      });
+                    },
                     decoration: InputDecoration(
                       hintText: "Cari Produk",
                       prefixIcon: const Icon(Icons.search),
+                      // Tombol hapus pencarian (opsional tapi disarankan)
+                      suffixIcon: _searchQuery.isNotEmpty 
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() { _searchQuery = ""; });
+                              },
+                            ) 
+                          : null,
                       filled: true,
                       fillColor: const Color(0xFFEEEEEE),
                       border: OutlineInputBorder(
@@ -312,6 +417,8 @@ class ProductCard extends StatelessWidget {
             child: PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert, color: Colors.grey),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              // Menghilangkan padding default menu agar Container berwarna bisa tampil penuh
+              padding: EdgeInsets.zero, 
               onSelected: (value) {
                 if (value == 'edit' && onEdit != null) {
                   onEdit!();
@@ -320,24 +427,38 @@ class ProductCard extends StatelessWidget {
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                // ITEM EDIT
+                PopupMenuItem(
                   value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit, color: Color(0xFF0D3B36)),
-                      SizedBox(width: 8),
-                      Text('Edit'),
-                    ],
+                  child: Container(
+                    width: double.infinity,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFC8E6C9), // Hijau muda (Green 100)
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'Edit',
+                      style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
-                const PopupMenuItem(
+                // ITEM HAPUS
+                PopupMenuItem(
                   value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Hapus', style: TextStyle(color: Colors.red)),
-                    ],
+                  child: Container(
+                    width: double.infinity,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFCDD2), // Merah muda (Red 100)
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'Hapus',
+                      style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
               ],
